@@ -1,4 +1,10 @@
 var Surface = require('./graphics').Surface;
+var event = require('./event');
+
+/*  Modified by: Asher Wolfstein (asherwunk@gmail.com) June 18th, 2017
+ *               For more information see my blog at http://wunk.me/
+ *               Also the specific URL: http://wunk.me/programming-projects/pygjs
+ */
 
 /**
  * @fileoverview Methods to create, access and manipulate the display Surface.
@@ -76,9 +82,10 @@ var Surface = require('./graphics').Surface;
  *
  */
 
-var CANVAS_ID = "gjs-canvas";
-var LOADER_ID = "gjs-loader";
+var CANVAS_ID = exports.CANVAS_ID = "gjs-canvas";
+var LOADER_ID = exports.LOADER_ID = "gjs-loader";
 var SURFACE = null;
+exports.DEPTH = 32;
 
 /**
  * Pass this flag to `gamejs.display.setMode(resolution, flags)` to disable
@@ -146,8 +153,13 @@ function onResize(event) {
    var canvas = getCanvas();
    SURFACE._canvas.width = canvas.clientWidth;
    SURFACE._canvas.height = canvas.clientHeight;
+   size = SURFACE.getSize();
+   
    require('./event')._triggerCallbacks({
-      type: require('./event').DISPLAY_RESIZE
+      type: require('./event').DISPLAY_RESIZE,
+      size: size,
+      w: size[0],
+      h: size[1]
    });
 }
 
@@ -174,6 +186,11 @@ exports.init = function() {
    }
    // hook into resize
    window.addEventListener("resize", onResize, false);
+   
+   // hook into animation frame
+   event.onAnimationFrame(function(event){
+      enforceMode();
+   })
    return;
 };
 
@@ -221,8 +238,12 @@ exports._hasFocus = function() {
  * @param {Array} dimensions [width, height] of the display surface
  * @param {Number} flags gamejs.display.DISABLE_SMOOTHING | gamejs.display.FULLSCREEN | gamejs.display.POINTERLOCK
  */
-exports.setMode = function(dimensions, flags) {
+exports.setMode = function(dimensions, flags, depth) {
    SURFACE = null;
+   if (depth) {
+      exports.DEPTH = depth;
+   }
+   
    var canvas = getCanvas();
    canvas.width = canvas.clientWidth = dimensions[0];
    canvas.height = canvas.clientHeight = dimensions[1];
@@ -300,3 +321,68 @@ var getSurface = exports.getSurface = function(dimensions) {
    }
    return SURFACE;
 };
+
+var enforceMode = function() {
+   if (exports.DEPTH != 8) {
+      return;
+   }
+   
+   function nearest(x, a) {
+      return Math.floor(x / (255 / a)) * (255 / a);
+   }
+
+   surface = getSurface();
+   var size = surface.getSize();
+   var ctx = surface.context;
+   var imgdata = ctx.getImageData(0, 0, size[0], size[1]);
+   var data = imgdata.data;
+
+   // 8-bit: rrr ggg bb
+   for(var i = 0; i < data.length; i += 4) {
+       data[i]     = nearest(data[i],     8); // set value to nearest of 8 possibilities
+       data[i + 1] = nearest(data[i + 1], 8);
+       data[i + 2] = nearest(data[i + 2], 4);
+   }
+
+   ctx.putImageData(imgdata, 0, 0); // put image data to canvas
+}
+
+exports.isFullScreen = function () {
+   if (screen.width == window.innerWidth) {
+      return true;
+   }
+   
+   return false;
+}
+
+exports.minimized = false;
+
+if (typeof nw !== 'undefined') {
+   nw.Window.get().on('minimize', function() {
+      exports.minimized = true;
+   });
+   
+   nw.Window.get().on('restore', function() {
+      exports.minimized = false;
+   })
+   
+   exports.minimize = function () {
+      nw.Window.get().minimize();
+   }
+   
+   exports.restore = function () {
+      nm.Window.get().restore();
+   }
+   
+   exports.toggleFullScreen = function () {
+      nw.Window.get().toggleFullscreen();
+   }
+   
+   exports.setTitle = function (title) {
+      nw.Window.get().title = title;
+   }
+   
+   exports.getTitle = function () {
+      return nw.Window.get().title;
+   }
+}

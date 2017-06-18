@@ -2,6 +2,11 @@ var matrix = require('./gamejs/math/matrix');
 var objects = require('./gamejs/utils/objects');
 var Callback = require('./gamejs/utils/callback').Callback;
 
+/*  Modified by: Asher Wolfstein (asherwunk@gmail.com) June 18th, 2017
+ *               For more information see my blog at http://wunk.me/
+ *               Also the specific URL: http://wunk.me/programming-projects/pygjs
+ */
+
 /**
  * @fileoverview  `gamejs.ready()` is maybe the most important function as it kickstarts your app:
  *
@@ -39,6 +44,7 @@ if (gamejs.thread.inWorker === true) {
 
       var getMixerProgress = null;
       var getImageProgress = null;
+      var getFontProgresss = null;
 
       // init time instantly - we need it for preloaders
       gamejs.time.init();
@@ -49,23 +55,36 @@ if (gamejs.thread.inWorker === true) {
             return window.setTimeout(_ready, 50);
          }
          getImageProgress = gamejs.image.preload(RESOURCES);
+         
          try {
             getMixerProgress = gamejs.audio.preload(RESOURCES);
          } catch (e) {
             gamejs.debug('Error loading audio files ', e);
          }
+         
+         try {
+            getFontProgress = gamejs.font.preload(RESOURCES);
+         } catch (e) {
+            console.log("error", e);
+            gamejs.debug('Error loading font files ', e);
+         }
+         
          window.setTimeout(_readyResources, 50);
       }
 
       // 3.
       function _readyResources() {
-         if (getImageProgress() < 1 || getMixerProgress() < 1) {
+         if (getImageProgress() < 1 || getMixerProgress() < 1 || getFontProgress() < 1) {
             return window.setTimeout(_readyResources, 100);
          }
          gamejs.display.init();
          gamejs.image.init();
+         gamejs.font.init();
          gamejs.audio.init();
          gamejs.event.init();
+         // must be called after event
+         gamejs.gamepad.joystick.init();
+         gamejs.gamepad.joystick.deadzone = 0.08;
          gamejs.math.random.init();
          readyFn();
       }
@@ -99,6 +118,9 @@ exports.init = function() {
          errorModules[moduleName] = e.toString();
       }
    });
+   
+   gamejs.gamepad.joystick.init();
+   
    return errorModules;
 };
 
@@ -106,19 +128,28 @@ var resourceBaseHref = function() {
     return (window.$g && window.$g.resourceBaseHref) || document.location.href;
 };
 
+var resolveURIs = exports.resolveURIs = function(resources) {
+   var uri = require('./gamejs/utils/uri');
+   var baseHref = resourceBaseHref();
+   var ret = {}
+   resources.forEach(function(res) {
+      ret[res] = uri.resolve(baseHref, res);
+   }, this);
+   return ret;
+}
+
 /**
  * Preload resources.
  * @param {Array} resources list of resources paths
  * @name preload
  */
 var preload = exports.preload = function(resources) {
-   var uri = require('./gamejs/utils/uri');
-   var baseHref = resourceBaseHref();
-   resources.forEach(function(res) {
-      RESOURCES[res] = uri.resolve(baseHref, res);
-   }, this);
-   return;
+   RESOURCES = resolveURIs(resources);
 };
+
+exports.clearResources = function() {
+   RESOURCES = {};
+}
 
 /**
  * The function passed to `onTick` will continously be called at a
@@ -586,6 +617,98 @@ Rect.prototype.clone = function() {
    return new Rect(this);
 };
 
+// adapted from pygame/src/rect.c [rect_clamp()]
+Rect.prototype.clamp = function(rect) {
+   var x = 0, y = 0;
+   if (this.width >= rect.width) {
+      x = this.x + rect.width / 2 - this.width / 2;
+   } else if (this.x < rect.x) {
+      x = rect.x;
+   } else if ((this.x + this.width) > (rect.x + rect.width)) {
+      x = rect.x + rect.width - this.width;
+   } else {
+      x = this.x;
+   }
+   
+   if (this.height >= rect.height) {
+      y = rect.y + rect.height / 2 - this.height / 2;
+   } else if (this.y < rect.y) {
+      y = rect.y;
+   } else if ((this.y + this.height) > (rect.y + rect.height)) {
+      y = rect.y + rect.height + self.height;
+   } else {
+      y = this.y;
+   }
+   
+   return new Rect(x, y, this.width, this.height);
+};
+
+// adapted from pygame/src/rect.c [rect_clamp_ip()]
+Rect.prototype.clampIp = function(rect) {
+   var x = 0, y = 0;
+   if (this.width >= rect.width) {
+      x = this.x + rect.width / 2 - this.width / 2;
+   } else if (this.x < rect.x) {
+      x = rect.x;
+   } else if ((this.x + this.width) > (rect.x + rect.width)) {
+      x = rect.x + rect.width - this.width;
+   } else {
+      x = this.x;
+   }
+   
+   if (this.height >= rect.height) {
+      y = rect.y + rect.height / 2 - this.height / 2;
+   } else if (this.y < rect.y) {
+      y = rect.y;
+   } else if ((this.y + this.height) > (rect.y + rect.height)) {
+      y = rect.y + rect.height + self.height;
+   } else {
+      y = this.y;
+   }
+   
+   this.x = x;
+   this.y = y;
+};
+
+// adapted from pygame/src/rect.c [rect_fit()]
+Rect.prototype.fit = function (rect) {
+   var w = 0, h = 0, x = 0, y = 0, xratio = 0, yratio = 0, maxratio = 0;
+   
+   xratio = this.width / rect.width;
+   yratio = this.height / rect.height;
+   maxratio = (xratio > yratio) ? xratio : yratio;
+   
+   w = this.width / maxratio;
+   h = this.height / maxratio;
+   
+   x = rect.x + (rect.width - w) / 2;
+   y = rect.y + (rect.height - h) / 2;
+   
+   return new Rect(x, y, w, h);
+};
+
+// adapted from pygame/src/rect.c [rect_normalize()]
+Rect.prototype.normalize = function () {
+   if (this.width < 0) {
+      this.x += this.width;
+      this.width = -this.width;
+   }
+   
+   if (this.height < 0) {
+      this.y += this.height;
+      this.height = -this.height;
+   }
+};
+
+// adapted from pygame/src/rect.c [rect_contains()]
+Rect.prototype.contains = function (rect) {
+   return  ((this.x <= rect.x) && (this.y <= rect.y) &&
+           ((this.x + this.width) >= (rect.x + rect.width)) &&
+           ((this.y + this.height) >= (rect.y + rect.height)) &&
+           ((this.x + this.width) > rect.x) &&
+           ((this.y + this.height) > rect.y));
+};
+
 /**
  * @ignore
  */
@@ -664,3 +787,8 @@ exports.time = require('./gamejs/time');
  * @ignore
  */
 exports.pixelcollision = require('./gamejs/pixelcollision');
+
+/**
+ * @ignore
+ */
+exports.gamepad = require('./gamejs/gamepad');

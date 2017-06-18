@@ -1,4 +1,13 @@
 var gamejs = require('../gamejs');
+var howler = require('./lib/howler.core');
+
+/*  Modified by: Asher Wolfstein (asherwunk@gmail.com) June 18th, 2017
+ *               For more information see my blog at http://wunk.me/
+ *               Also the specific URL: http://wunk.me/programming-projects/pygjs
+ */
+
+exports.Howl = howler.Howl;
+exports.Howler = howler.Howler;
 
 /**
  * @fileoverview Playing sounds with the html5 audio tag. Audio files must be preloaded
@@ -40,6 +49,10 @@ exports.init = function() {
    addToCache(audios);
    return;
 };
+
+exports.clearCache = function() {
+   CACHE = {};
+}
 
 /**
  * Preload the audios into cache
@@ -160,19 +173,7 @@ exports.Sound = function Sound(uriOrAudio) {
     */
    this.stop = function() {
       channels.forEach(function(audio) {
-         audio.pause();
-         audio.load();
-         audio.currentTime = 0;
-      });
-   };
-
-   /**
-    * Pause the sound.
-    * This will pause the playback of this Sound on any active Channels.
-    */
-   this.pause = function() {
-      channels.forEach(function(audio) {
-         audio.pause();
+         audio.stop();
       });
    };
 

@@ -1,5 +1,11 @@
 var gamejs = require('../gamejs');
 
+/*  Modified by: Asher Wolfstein (asherwunk@gmail.com) June 18th, 2017
+ *               For more information see my blog at http://wunk.me/
+ *               Also the specific URL: http://wunk.me/programming-projects/pygjs
+ */
+
+
 /**
  * @fileoverview Load images as Surfaces.
  *
@@ -56,7 +62,6 @@ exports.load = function(key) {
    return surface;
 };
 
-
 /**
  * add all images on the currrent page into cache
  * @ignore
@@ -64,6 +69,10 @@ exports.load = function(key) {
 exports.init = function() {
    return;
 };
+
+exports.clearCache = function() {
+   CACHE = {};
+}
 
 /**
  * preload the given img URIs
@@ -128,4 +137,11 @@ exports.preload = function(imgIdents) {
 var addToCache = function(img) {
    CACHE[img.gamejsKey] = img;
    return;
+};
+
+/**
+ * @ignore
+ */
+exports.isPreloading = function() {
+   return _PRELOADING;
 };

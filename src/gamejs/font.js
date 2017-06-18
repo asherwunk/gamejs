@@ -1,5 +1,139 @@
 var Surface = require('./graphics').Surface;
 var objects = require('./utils/objects');
+var gamejs = require('../gamejs');
+var opentype = require('./lib/opentype');
+
+var language = 'en';
+
+/*  Modified by: Asher Wolfstein (asherwunk@gmail.com) June 18th, 2017
+ *               For more information see my blog at http://wunk.me/
+ *               Also the specific URL: http://wunk.me/programming-projects/pygjs
+ */
+
+
+/**
+ * @fileoverview Load images as Surfaces.
+ *
+ * Sounds & Images are loaded relative to your game's html page
+ * (the html which includes the GameJs code) or relative to the
+ * property `window.$g.resourceBaseHref`
+ * if it is set.
+ *
+ *
+ */
+var CACHE = {};
+
+/**
+ * need to export preloading status for require
+ * @ignore
+ */
+var _PRELOADING = false;
+
+exports.setLanguage = function(lang) {
+   language = lang;
+}
+
+/**
+ * @ignore
+ */
+exports.isPreloading = function() {
+   return _PRELOADING;
+};
+
+/**
+ * add all images on the currrent page into cache
+ * @ignore
+ */
+exports.init = function() {
+   return;
+};
+
+/**
+ * preload the given font URIs
+ * @returns {Function} which returns 0-1 for preload progress
+ * @ignore
+ */
+exports.preload = function(fontIdents) {
+
+   var countLoaded = 0;
+   var countTotal = 0;
+
+   function incrementLoaded() {
+      countLoaded++;
+      if (countLoaded == countTotal) {
+         _PRELOADING = false;
+      }
+      if (countLoaded % 10 === 0) {
+         gamejs.logging.debug('gamejs.font: preloaded  ' + countLoaded + ' of ' + countTotal);
+      }
+   }
+
+   function getProgress() {
+      return countTotal > 0 ? countLoaded / countTotal : 1;
+   }
+
+   function callback(err, font) {
+      incrementLoaded();
+      if (err) {
+         throw new Error('Could not load font: ' + err);
+      } else {
+         addToCache(font);
+      }
+   }
+   
+   var key;
+   for (key in fontIdents) {
+      var lowerKey = key.toLowerCase();
+      if (lowerKey.indexOf('.ttf') == -1 &&
+            lowerKey.indexOf('.woff') == -1 &&
+            lowerKey.indexOf('.woff2') == -1 &&
+            lowerKey.indexOf('.otf') == -1) {
+         continue;
+      }
+      opentype.load(key, callback);
+      countTotal++;
+   }
+   if (countTotal > 0) {
+      _PRELOADING = true;
+   }
+   return getProgress;
+};
+
+/**
+ * add the given <img> dom elements into the cache.
+ * @private
+ */
+var addToCache = function(font) {
+   CACHE[font.names.fullName[language]] = font;
+   return;
+};
+
+/**
+ * Load image and return it on a Surface.
+ *
+ * All images must be preloaded before they can be used.
+ * @example
+
+ *     gamejs.preload(["./images/ship.png", "./images/sunflower.png"]);
+ *     // ...later...
+ *     display.blit(gamejs.image.load('images/ship.png'))
+ *
+ * @param {String|dom.Image} uriOrImage resource uri for image
+ * @returns {gamejs.graphics.Surface} surface with the image on it.
+ */
+exports.load = function(key) {
+   var font;
+   if (typeof key === 'string') {
+      font = CACHE[key];
+      if (!font) {
+			throw new Error('Missing "' + key + '", gamejs.preload() all images before trying to load them.');
+      }
+   } else {
+      font = key;
+   }
+   
+   return font;
+};
 
 /**
  * @fileoverview Methods for creating Font objects which can render text
@@ -22,7 +156,7 @@ var objects = require('./utils/objects');
  * @param {String} fontSettings a css font definition, e.g., "20px monospace"
  * @param {STring} backgroundColor valid #rgb string, "#ff00cc"
  */
-var Font = exports.Font = function(fontSettings, backgroundColor) {
+var Font = exports.Font = function(fontSettings, backgroundColor, underline) {
     /**
      * @ignore
      */
@@ -32,6 +166,7 @@ var Font = exports.Font = function(fontSettings, backgroundColor) {
    // http://diveintohtml5.org/canvas.html#text
    this.sampleSurface.context.textBaseline = 'bottom';
    this.backgroundColor = backgroundColor || false;
+   this.underline = underline || false;
    return this;
 };
 
@@ -54,7 +189,18 @@ Font.prototype.render = function(text, color) {
    ctx.textBaseline = this.sampleSurface.context.textBaseline;
    ctx.textAlign = this.sampleSurface.context.textAlign;
    ctx.fillStyle = ctx.strokeStyle = color || "#000000";
-   ctx.fillText(text, 0, surface.rect.height, surface.rect.width);
+   
+   if (this.underline) {
+      ctx.fillText(text, 0, surface.rect.height, surface.rect.width-5);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.moveTo(0,surface.rect.height-3);
+      ctx.lineTo(surface.rect.width,surface.rect.height-3);
+      ctx.stroke();
+   } else {
+      ctx.fillText(text, 0, surface.rect.height, surface.rect.width);
+   }
+   
    ctx.restore();
    return surface;
 };
@@ -81,7 +227,11 @@ objects.accessors(Font.prototype, {
          // »This version of the specification does not provide a way to obtain
          // the bounding box dimensions of the text.«
          // see http://www.whatwg.org/specs/web-apps/current-work/multipage/the-canvas-element.html#dom-context-2d-measuretext
-         return this.sampleSurface.context.measureText('M').width * 1.5;
+         if (this.underline) {
+            return (this.sampleSurface.context.measureText('M').width * 1.5) + 5;
+         } else {
+            return this.sampleSurface.context.measureText('M').width * 1.5;
+         }
       }
    }
 

@@ -33,6 +33,12 @@ var objects = require('./utils/objects');
 var matrix = require('./math/matrix');
 var vectors = require('./math/vectors');
 
+/*  Modified by: Asher Wolfstein (asherwunk@gmail.com) June 18th, 2017
+ *               For more information see my blog at http://wunk.me/
+ *               Also the specific URL: http://wunk.me/programming-projects/pygjs
+ */
+
+
 /**
  * A Surface represents a bitmap image with a fixed width and height. The
  * most important feature of a Surface is that they can be `blitted`
@@ -581,6 +587,30 @@ Surface.prototype.scale = function(dims) {
    return newSurface;
 };
 
+Surface.prototype.resize = function(scale) {
+   var oldDims = this.getSize();
+   var widthScaled = oldDims[0] * scale;
+   var heightScaled = oldDims[1] * scale;
+   var origCtx = this.context;
+   var origPixels = origCtx.getImageData(0, 0, oldDims[0], oldDims[1]);
+   var newSurface = new Surface([widthScaled, heightScaled]);
+   var scaledCtx = newSurface.context;
+   var scaledPixels = scaledCtx.getImageData( 0, 0, widthScaled, heightScaled );
+   
+   for( var y = 0; y < heightScaled; y++ ) {
+       for( var x = 0; x < widthScaled; x++ ) {
+           var index = (Math.floor(y / scale) * oldDims[0] + Math.floor(x / scale)) * 4;
+           var indexScaled = (y * widthScaled + x) * 4;
+           scaledPixels.data[ indexScaled ] = origPixels.data[ index ];
+           scaledPixels.data[ indexScaled+1 ] = origPixels.data[ index+1 ];
+           scaledPixels.data[ indexScaled+2 ] = origPixels.data[ index+2 ];
+           scaledPixels.data[ indexScaled+3 ] = origPixels.data[ index+3 ];
+       }
+   }
+   scaledCtx.putImageData( scaledPixels, 0, 0 );
+   return newSurface;
+}
+
 /**
  * Flip a Surface either vertically, horizontally or both. This returns
  * a new Surface (i.e: nondestructive).
@@ -648,7 +678,7 @@ exports.blitArray = function(surface, surfaceArray) {
  * @param {gamejs.graphics.Surface|Array} surfaceOrDimensions
  * @see http://dev.w3.org/html5/2dcontext/#pixel-manipulation
  */
-var SurfaceArray = exports.SurfaceArray = function(surfaceOrDimensions) {
+var SurfaceArray = exports.SurfaceArray = function(surfaceOrDimensions, uImageData) {
    var size = null;
    var data = null;
    var imageData = null;
@@ -727,11 +757,174 @@ var SurfaceArray = exports.SurfaceArray = function(surfaceOrDimensions) {
    if (surfaceOrDimensions instanceof Array) {
       size = surfaceOrDimensions;
       imageData = gamejs.display.getSurface().context.createImageData(size[0], size[1]);
+      if (typeof(uImageData) !== 'undefined') {
+         imageData.data.set(uImageData)
+      }
       data = imageData.data;
    } else {
       size = surfaceOrDimensions.getSize();
       imageData = surfaceOrDimensions.getImageData(0, 0, size[0], size[1]);
+      if (typeof(uImageData) !== 'undefined') {
+         imageData.data.set(uImageData)
+      }
       data = imageData.data;
    }
+   
+   this.buf = new ArrayBuffer(imageData.data.length);
+   this.alpha = new Uint8ClampedArray(imageData.data.length);
+   this.red = new Uint8ClampedArray(imageData.data.length);
+   this.green = new Uint8ClampedArray(imageData.data.length);
+   this.blue = new Uint8ClampedArray(imageData.data.length);
+   this.buf8 = new Uint8ClampedArray(this.buf);
+   this.buf32 = new Uint32Array(this.buf);
+   this.array3d = [];
+   
+   for (var y = 0; y < size[1]; ++y) {
+      this.array3d[y] = [];
+      for (var x = 0; x < size[0]; ++x) {
+         this.array3d[y][x] = [];
+         var index = (y * size[0] + x) * 4;
+         var red = imageData.data[index];
+         var green = imageData.data[index+1];
+         var blue = imageData.data[index+2];
+         var alpha = imageData.data[index+3];
+         
+         this.buf32[y * size[0] + x] =
+                  (alpha << 24) |    // alpha
+                  (blue << 16) |    // blue
+                  (green <<  8) |    // green
+                  red;            // red
+         
+         this.alpha[y * size[0] + x] = alpha;
+         this.red[y * size[0] + x] = red;
+         this.green[y * size[0] + x] = green;
+         this.blue[y * size[0] + x] = blue;
+         
+         this.array3d[y][x][0] = red;
+         this.array3d[y][x][1] = green;
+         this.array3d[y][x][2] = blue;
+         this.array3d[y][x][3] = alpha;
+      }
+   }
+   
+   this.makeSurface = function (newArray) {
+      
+      if (newArray instanceof Uint32Array) {
+         for (var y = 0; y < size[1]; ++y) {
+            for (var x = 0; x < size[0]; ++x) {
+               this.buf32[y * size[0] + x] = newArray[y * size[0] + x];
+            }
+         }
+      }
+      
+      imageData.data.set(this.buf8);
+      
+      return this.surface;
+   };
+   
+   this.copyArray = function (copyArray, source) {
+      var x = 0, y = 0;
+      
+      if (copyArray instanceof Uint32Array) {
+         for (y = 0; y < size[1]; ++y) {
+            for (x = 0; x < size[0]; ++x) {
+               if (source == "p") {
+                  copyArray[y * size[0] + x] = this.buf32[y * size[0] + x];
+               } else if (source == "r") {
+                  copyArray[y * size[0] + x] = this.red[y * size[0] + x];
+               } else if (source == "g") {
+                  copyArray[y * size[0] + x] = this.green[y * size[0] + x] << 8;
+               } else if (source == "b") {
+                  copyArray[y * size[0] + x] = this.blue[y * size[0] + x] << 16;
+               } else if (source == "a") {
+                  copyArray[y * size[0] + x] = this.alpha[y * size[0] + x] << 24;
+               }
+            }
+         }
+      } else if (source == "c") {
+         for (y = 0; y < size[1]; ++y) {
+            for (x = 0; x < size[0]; ++x) {
+               copyArray[y][x] = this.array3d[y][x];
+            }
+         }
+      } else if (source == "m") {
+         mapped = this.mapArray(this.array3d);
+         for (y = 0; y < size[1]; ++y) {
+            for (x = 0; x < size[0]; ++x) {
+               copyArray[y * size[0] + x] = mapped[y * size[0] + x];
+            }
+         }
+      }
+   };
+   
+   this.makeSurface3d = function (newArray3D) {
+      for (var y = 0; y < size[1]; ++y) {
+         for (var x = 0; x < size[0]; ++x) {
+            this.buf32[y * size[0] + x] =
+                     (newArray3D[y][x][3] << 24) |    // alpha
+                     (newArray3D[y][x][2] << 16) |    // blue
+                     (newArray3D[y][x][1] <<  8) |    // green
+                     newArray3D[y][x][0];            // red
+         }
+      }
+      
+      imageData.data.set(this.buf8);
+      
+      return this.surface;
+   };
+   
+   this.setColorKey = function (color) {
+      for (var y = 0; y < size[1]; ++y) {
+         for (var x = 0; x < size[0]; ++x) {
+            px = [this.array3d[y][x][0], this.array3d[y][x][1], this.array3d[y][x][2]];
+            if (px.join(',') == color.join(',')) {
+               this.array3d[y][x][3] = 0;
+            }
+         }
+      }
+      
+      return this.makeSurface3d(this.array3d);
+   }
+   
+   this.mapArray = function (newArray3D) {
+      var dst = new ArrayBuffer(this.buf.byteLength);
+      var dst32 = new Uint32Array(dst);
+      
+      for (var y = 0; y < size[1]; ++y) {
+         for (var x = 0; x < size[0]; ++x) {
+            dst32[y * size[0] + x] =
+                  (newArray3D[y][x][3] << 24) |    // alpha
+                  (newArray3D[y][x][2] << 16) |    // blue
+                  (newArray3D[y][x][1] <<  8) |    // green
+                  newArray3D[y][x][0];            // red
+         }
+      }
+      
+      return dst32;
+   };
+   
+   this.averageColor = function(rect) {
+      if (typeof rect === 'undefined') {
+         rect = Rect([0,0], [size[0], size[1]]);
+      }
+      
+      var rtot, gtot, btot, atot, tpix;
+      
+      rtot = gtot = btot = atot = 0;
+      
+      tpix = size[1]*size[0];
+      
+      for (var y = rect.top; y < size[1] && y < rect.height; ++y) {
+         for (var x = rect.left; x < size[0] && x < rect.width; ++x) {
+            rtot += this.array3d[y][x][0];
+            gtot += this.array3d[y][x][1];
+            btot += this.array3d[y][x][2];
+            atot += this.array3d[y][x][3];
+         }
+      }
+      
+      return [rtot/size, gtot/size, btot/size, atot/size];
+   };
+   
    return this;
 };
