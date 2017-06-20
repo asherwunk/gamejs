@@ -24,4 +24,3 @@ If you appreciate my programming consider supporting me at the following links:
 
 For further information on the author please visit:
 * [My Beautiful Life - And All It's Friends](http://wunk.me/ "Personal Blog")
-* [Phabstractic Homepage](http://wunk.me/programming-projects/phabstractic/)
