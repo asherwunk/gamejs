@@ -1,3 +1,7 @@
+# ABANDONED
+
+This was a fork that I modified to work with asherwunk/pygjs.  Both of these repositories are abandoned.  No further support or developments will be dedicated to them.  Use at your own risk!
+
 # THIS IS A FORK
 
 This is my own personal fork of the amazing gamejs library: https://gamejs.org . I have modified it slightly for use in my own asherwunk/pygjs (PyGame in NodeWebkit/Browser).  I forked it so that I can perform a commit showing all my customizations
@@ -18,9 +22,5 @@ To see all modifications, for now, check the commit history
 
 # About Me
 
-If you appreciate my programming consider supporting me at the following links:
-* [KO-FI](http://ko-fi.com/asherwolfstein)
-* [Patreon](https://www.patreon.com/asherwolfstein)
-
 For further information on the author please visit:
-* [My Beautiful Life - And All It's Friends](http://wunk.me/ "Personal Blog")
+* [World Of Wunk](http://wunk.me/ "Personal Website")
